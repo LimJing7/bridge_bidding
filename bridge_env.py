@@ -5,6 +5,9 @@ Created on Sat Oct 21 13:35:48 2023
 @author: Lim Jing
 """
 
+from contract_score import Contract
+
+
 import enum
 import json
 import gymnasium as gym
@@ -66,11 +69,10 @@ class Bridge(gym.Env):
     def __init__(self, render_mode=None, base_type=None):
         self.base_type = base_type
         self.all_hands = json.load(open('./data/Hands_000001_000011.json'))
-        self.all_scores = json.load(open('./data/Scores_000001_000011.json'))
+        self.all_makes = json.load(open('./data/Scores_000001_000011.json'))
         self.n_boards = len(self.all_hands)
         
-        self.current_position = Position.NORTH
-        self.bid_history = []
+        self.current_position = Position.NORTH  # move this to reset later
 
         # Observations are dictionaries.
         # bid_history is a sequence of bids
@@ -130,12 +132,19 @@ class Bridge(gym.Env):
                   Position.SOUTH: self._parse_hand(hands_dict['S']),
                   Position.WEST:  self._parse_hand(hands_dict['W'])}
         return output
+
+    def _parse_makes(self, makes_dict):
+        output = {Position.NORTH: makes_dict['N'],
+                  Position.EAST:  makes_dict['E'],
+                  Position.SOUTH: makes_dict['S'],
+                  Position.WEST:  makes_dict['W']}
+        return output
         
     
     def _load_board(self):
         self.board_id = int(self.np_random.random() * self.n_boards)
         self.current_board = self._parse_hands(self.all_hands[f'{self.board_id}'])
-        self.current_scores = self.all_scores[f'{self.board_id}']
+        self.current_makes = self._parse_makes(self.all_makes[f'{self.board_id}'])
     
     
     def _get_obs(self):
@@ -146,11 +155,29 @@ class Bridge(gym.Env):
                 'vuln': vuln}
     
     def _get_reward(self):
-        #TODO
-        return 0
+        """
+        compute the reward of the latest bid relative to passing
+
+        Returns
+        -------
+        int
+            reward difference from passing
+
+        """
+        latest_bid = self.bid_history[-1]
+        latest_bid_name = latest_bid.name
+        if latest_bid == Bid.P:
+            return 0
+        else:
+            current_contract = Contract(level=latest_bid_name[-1], suit=latest_bid_name[:-1], doubles='', vuln=self._get_vuln())
+            current_score = current_contract.score(self.current_makes[self.current_position][latest_bid_name[:-1]])
+            self.score_info.append(current_score)
+            reward = current_score - self.prev_score
+            self.prev_score = current_score
+        return reward
 
     def _get_info(self):
-        return None
+        return self.score_info
     
     def _get_vuln(self):
         #TODO
@@ -169,9 +196,12 @@ class Bridge(gym.Env):
         super().reset(seed=seed)
     
         self._load_board()
+        self.bid_history = []
+        self.score_info = []
 
         observation = self._get_obs()
         info = self._get_info()
+        self.prev_score = 0
     
         if self.render_mode == "human":
             self._render_frame()
@@ -180,14 +210,15 @@ class Bridge(gym.Env):
         
         
     def step(self, action):
-        self.bid_history.append(action)
-        self.bid_history.append(Bid.P)  # opponents are passing
+        self.bid_history.append(Bid(action))
         self.current_position = Position((self.current_position+2)%4)
         
         observation = self._get_obs()
         reward = self._get_reward()
         terminated = self._check_terminated()
         info = self._get_info()
+        
+        self.bid_history.append(Bid.P)  # opponents are passing
     
         if self.render_mode == "human":
             self._render_frame()
