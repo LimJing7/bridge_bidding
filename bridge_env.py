@@ -6,62 +6,16 @@ Created on Sat Oct 21 13:35:48 2023
 """
 
 from contract_score import Contract
+from useful_enums import Bid, Position, Vuln
 
 
-import enum
 import json
 import gymnasium as gym
 from gymnasium import spaces
 import pygame
 import numpy as np
+import random
 
-
-class Position(enum.IntEnum):
-    NORTH = 0
-    EAST = 1
-    SOUTH = 2
-    WEST = 3
-    
-class Bid(enum.IntEnum):
-    C1 = 0
-    C2 = 1
-    C3 = 2
-    C4 = 3
-    C5 = 4
-    C6 = 5
-    C7 = 6
-    D1 = 7
-    D2 = 8
-    D3 = 9
-    D4 = 10
-    D5 = 11
-    D6 = 12
-    D7 = 13
-    H1 = 14
-    H2 = 15
-    H3 = 16
-    H4 = 17
-    H5 = 18
-    H6 = 19
-    H7 = 20
-    S1 = 21
-    S2 = 22
-    S3 = 23
-    S4 = 24
-    S5 = 25
-    S6 = 26
-    S7 = 27
-    NT1 = 28
-    NT2 = 29
-    NT3 = 30
-    NT4 = 31
-    NT5 = 32
-    NT6 = 33
-    NT7 = 34
-    P = 35
-    X = 36
-    XX = 37
-    
 
 class Bridge(gym.Env):
     metadata = {"render_modes": ["ansi"], "render_fps": 4}
@@ -71,8 +25,6 @@ class Bridge(gym.Env):
         self.all_hands = json.load(open('./data/Hands_000001_000011.json'))
         self.all_makes = json.load(open('./data/Scores_000001_000011.json'))
         self.n_boards = len(self.all_hands)
-        
-        self.current_position = Position.NORTH  # move this to reset later
 
         # Observations are dictionaries.
         # bid_history is a sequence of bids
@@ -142,7 +94,7 @@ class Bridge(gym.Env):
         
     
     def _load_board(self):
-        self.board_id = int(self.np_random.random() * self.n_boards)
+        self.board_id = int(self.np_random.random() * (self.n_boards-1)) + 1
         self.current_board = self._parse_hands(self.all_hands[f'{self.board_id}'])
         self.current_makes = self._parse_makes(self.all_makes[f'{self.board_id}'])
     
@@ -180,7 +132,20 @@ class Bridge(gym.Env):
         return self.score_info
     
     def _get_vuln(self):
-        #TODO
+        if self.vuln == Vuln.NONE:
+            return 0
+        elif self.vuln == Vuln.ALL:
+            return 1
+        elif self.vuln == Vuln.NS:
+            if self.current_position == Position.NORTH or self.current_position == Position.SOUTH:
+                return 1
+            else:
+                return 0
+        elif self.vuln == Vuln.EW:
+            if self.current_position == Position.EAST or self.current_position == Position.WEST:
+                return 1
+            else:
+                return 0
         return 0
     
     def _check_terminated(self):
@@ -198,6 +163,8 @@ class Bridge(gym.Env):
         self._load_board()
         self.bid_history = []
         self.score_info = []
+        self.current_position = Position(self.np_random.choice(list(Position)))
+        self.vuln = Vuln(self.np_random.choice(list(Vuln)))
 
         observation = self._get_obs()
         info = self._get_info()
@@ -211,7 +178,6 @@ class Bridge(gym.Env):
         
     def step(self, action):
         self.bid_history.append(Bid(action))
-        self.current_position = Position((self.current_position+2)%4)
         
         observation = self._get_obs()
         reward = self._get_reward()
@@ -219,6 +185,7 @@ class Bridge(gym.Env):
         info = self._get_info()
         
         self.bid_history.append(Bid.P)  # opponents are passing
+        self.current_position = Position((self.current_position+2)%4)
     
         if self.render_mode == "human":
             self._render_frame()
