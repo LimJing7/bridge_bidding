@@ -14,7 +14,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import pygame
 import numpy as np
-import random
 
 
 class Bridge(gym.Env):
@@ -181,10 +180,10 @@ class Bridge(gym.Env):
         
         observation = self._get_obs()
         reward = self._get_reward()
-        terminated = self._check_terminated()
         info = self._get_info()
         
         self.bid_history.append(Bid.P)  # opponents are passing
+        terminated = self._check_terminated()
         self.current_position = Position((self.current_position+2)%4)
     
         if self.render_mode == "human":
